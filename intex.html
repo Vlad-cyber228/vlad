@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Color Palette Generator</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #f0f0f0; }
+    .palette { display: flex; justify-content: center; gap: 10px; margin: 20px 0; }
+    .swatch { width: 100px; height: 100px; border-radius: 10px; cursor: pointer; position: relative; border: 3px solid #fff; box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
+    .swatch.locked { border-color: #ff6b6b; }
+    .hex { margin-top: 10px; font-family: monospace; cursor: pointer; }
+    .hex:hover { text-decoration: underline; }
+    button { padding: 10px 20px; margin: 10px; background: #4ecdc4; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    select { padding: 10px; margin: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Color Palette Generator</h1>
+  <div>
+    <label>Size: <select id="size"><option>3</option><option>5</option><option>7</option></select></label>
+    <label>Mode: <select id="mode"><option>random</option><option>complementary</option><option>analogous</option><option>monochromatic</option></select></label>
+    <button onclick="generate()">Generate</button>
+  </div>
+  <div id="palette" class="palette"></div>
+  <div id="exports"></div>
+
+  <script>
+    let palette = [];
+    let locked = new Set();
+
+    function hslToHex(h, s, l) {
+      const c = (1 - Math.abs(2 * l - 1)) * s;
+      const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+      const m = l - c / 2;
+      let r, g, b;
+      if (h < 60) { r = c; g = x; b = 0; }
+      else if (h < 120) { r = x; g = c; b = 0; }
+      else if (h < 180) { r = 0; g = c; b = x; }
+      else if (h < 240) { r = 0; g = x; b = c; }
+      else if (h < 300) { r = x; g = 0; b = c; }
+      else { r = c; g = 0; b = x; }
+      return '#' + [r + m, g + m, b + m].map(n => Math.round(n * 255).toString(16).padStart(2, '0')).join('');
+    }
+
+    function randomHSL() {
+      return { h: Math.random() * 360, s: 0.5 + Math.random() * 0.5, l: 0.4 + Math.random() * 0.4 };
+    }
+
+    function generateHarmony(base, mode, count) {
+      const colors = [base];
+      for (let i = 1; i < count; i++) {
+        let h = base.h;
+        if (mode === 'complementary') h = (h + 180) % 360;
+        else if (mode === 'analogous') h = (base.h + (i % 2 ? 30 : -30)) % 360;
+        else if (mode === 'monochromatic') { h = base.h; /* vary s/l */ }
+        colors.push({ h, s: base.s * (0.7 + Math.random() * 0.6), l: base.l * (0.7 + Math.random() * 0.6) });
+      }
+      return colors;
+    }
+
+    function generate() {
+      const size = parseInt(document.getElementById('size').value);
+      const mode = document.getElementById('mode').value;
+      palette = [];
+      if (mode === 'random') {
+        for (let i = 0; i < size; i++) palette.push(randomHSL());
+      } else {
+        const base = randomHSL();
+        palette = generateHarmony(base, mode, size);
+      }
+      render();
+    }
+
+    function render() {
+      const container = document.getElementById('palette');
+      container.innerHTML = '';
+      palette.forEach((color, i) => {
+        const hex = hslToHex(color.h, color.s, color.l);
+        const swatch = document.createElement('div');
+        swatch.className = `swatch ${locked.has(i) ? 'locked' : ''}`;
+        swatch.style.background = hex;
+        swatch.onclick = () => toggleLock(i);
+        const hexEl = document.createElement('div');
+        hexEl.className = 'hex';
+        hexEl.textContent = hex;
+        hexEl.title = 'Click to copy';
+        hexEl.onclick = (e) => { navigator.clipboard.writeText(hex); e.stopPropagation(); hexEl.textContent = 'Copied!'; setTimeout(() => hexEl.textContent = hex, 1000); };
+        swatch.appendChild(hexEl);
+        container.appendChild(swatch);
+      });
+      renderExports();
+    }
+
+    function toggleLock(i) {
+      if (locked.has(i)) locked.delete(i);
+      else locked.add(i);
+      render();
+    }
+
+    function download(filename, content) {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([content], { type: 'text/plain' }));
+      a.download = filename;
+      a.click();
+    }
+
+    function renderExports() {
+      const container = document.getElementById('exports');
+      container.innerHTML = `
+        <button onclick="exportText()">Text</button>
+        <button onclick="exportJSON()">JSON</button>
+        <button onclick="exportCSS()">CSS</button>
+      `;
+    }
+
+    window.exportText = () => download('palette.txt', palette.map(c => hslToHex(c.h, c.s, c.l)).join('\n'));
+    window.exportJSON = () => download('palette.json', JSON.stringify(palette.map(c => hslToHex(c.h, c.s, c.l)), null, 2));
+    window.exportCSS = () => download('palette.css', `:root {\n${palette.map((c, i) => `--color-${i}: ${hslToHex(c.h, c.s, c.l)};`).join('\n  ')}\n}`);
+
+    generate(); // Initial palette
+  </script>
+</body>
+</html>
